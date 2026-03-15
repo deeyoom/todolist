@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>DEEYOO_CORE</title>
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+    <style>
+        :root { --green: #00ff41; --bg: #000; --dim: #002200; }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        
+        body {
+            background: var(--bg); color: var(--green);
+            font-family: 'VT323', monospace; margin: 0; padding: 0;
+            height: 100vh; overflow: hidden; display: flex; flex-direction: column;
+        }
+
+        /* Хакерский декор */
+        .scanlines { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.2) 50%); background-size: 100% 2px; z-index: 10; pointer-events: none; }
+
+        header {
+            text-align: center; padding: 20px 10px;
+            border-bottom: 2px solid var(--green);
+            background: var(--dim);
+        }
+        .user-name { font-size: 55px; margin: 0; text-shadow: 0 0 15px var(--green); letter-spacing: 4px; }
+        .sys-status { font-size: 14px; letter-spacing: 2px; opacity: 0.8; }
+
+        /* Окно активной фазы */
+        .active-phase {
+            margin: 10px; border: 1px solid var(--green);
+            padding: 15px; background: rgba(0, 255, 65, 0.05);
+            box-shadow: inset 0 0 10px var(--dim);
+        }
+        .live-clock { font-size: 45px; text-align: center; color: #fff; margin-bottom: 5px; }
+        .task-display { font-size: 24px; text-align: center; min-height: 60px; display: flex; align-items: center; justify-content: center; border-top: 1px solid var(--dim); padding-top: 10px; }
+
+        /* Список задач */
+        .task-list {
+            flex-grow: 1; overflow-y: auto; padding: 10px;
+            mask-image: linear-gradient(to bottom, transparent, black 10%, black 90%, transparent);
+        }
+        .row {
+            display: grid; grid-template-columns: 70px 1fr;
+            padding: 12px 5px; border-bottom: 1px solid var(--dim);
+            font-size: 20px;
+        }
+        .row.active { background: var(--green); color: #000; font-weight: bold; }
+        .row.past { opacity: 0.2; }
+
+        /* Панель управления */
+        .controls { padding: 10px 20px 20px; }
+        .btn-alert {
+            width: 100%; padding: 15px; background: transparent; color: var(--green);
+            border: 1px solid var(--green); font-family: inherit; font-size: 18px;
+            cursor: pointer; text-transform: uppercase;
+        }
+        .btn-alert.enabled { background: var(--dim); border-color: #555; color: #555; }
+    </style>
+</head>
+<body>
+    <div class="scanlines"></div>
+
+    <header>
+        <div class="sys-status">SYSTEM_OWNER</div>
+        <h1 class="user-name">DEEYOO</h1>
+    </header>
+
+    <div class="active-phase">
+        <div id="clock" class="live-clock">00:00:00</div>
+        <div id="task-now" class="task-display">СИНХРОНИЗАЦИЯ...</div>
+    </div>
+
+    <div class="task-list" id="list"></div>
+
+    <div class="controls">
+        <button id="alert-btn" class="btn-alert" onclick="enableAlerts()">[ ВКЛЮЧИТЬ УВЕДОМЛЕНИЯ ]</button>
+    </div>
+
+<script>
+    const protocol = [
+        { t: "04:30", n: "Пробуждение / Тахаджуд" },
+        { t: "05:10", n: "Подготовка к Фаджру" },
+        { t: "05:20", n: "Фаджр намаз" },
+        { t: "05:40", n: "Чтение (Ум / Религия)" },
+        { t: "06:10", n: "Тренировка (Турник)" },
+        { t: "07:00", n: "Душ + Завтрак" },
+        { t: "07:30", n: "Кодинг / Алгоритмы" },
+        { t: "08:30", n: "Университет" },
+        { t: "13:10", n: "Зухр намаз" },
+        { t: "13:30", n: "Отдых / Power Nap" },
+        { t: "14:30", n: "C++ / Проекты" },
+        { t: "16:30", n: "Трейдинг / Анализ" },
+        { t: "17:40", n: "Аср намаз" },
+        { t: "18:00", n: "Книги / TG канал" },
+        { t: "19:10", n: "Магриб намаз" },
+        { t: "19:30", n: "Легкий код / Планы" },
+        { t: "20:30", n: "Ужин" },
+        { t: "21:00", n: "Иша намаз" },
+        { t: "21:20", n: "Чтение / Работа" },
+        { t: "22:30", n: "Сон (Shutdown)" }
+    ];
+
+    let alertsEnabled = false;
+
+    function render() {
+        document.getElementById('list').innerHTML = protocol.map(p => `
+            <div class="row" id="r-${p.t.replace(':','')}">
+                <div>[${p.t}]</div>
+                <div>${p.n}</div>
+            </div>
+        `).join('');
+    }
+
+    function sync() {
+        const d = new Date();
+        const now = d.getHours().toString().padStart(2, '0') + ":" + d.getMinutes().toString().padStart(2, '0');
+        
+        // Время обновляется СРАЗУ
+        document.getElementById('clock').innerText = d.toLocaleTimeString();
+
+        let active = protocol[0];
+        protocol.forEach(p => {
+            const el = document.getElementById('r-' + p.t.replace(':',''));
+            if (now >= p.t) {
+                el.className = 'row past';
+                active = p;
+            } else {
+                el.className = 'row';
+            }
+        });
+
+        const activeRow = document.getElementById('r-' + active.t.replace(':',''));
+        activeRow.className = 'row active';
+        document.getElementById('task-now').innerText = "> " + active.n;
+        
+        // Умный скролл
+        activeRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+        // Если включены уведомления и минута сменилась
+        if (alertsEnabled && d.getSeconds() === 0) {
+            const currentTask = protocol.find(p => p.t === now);
+            if (currentTask) {
+                if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+                new Notification("DEEYOO: НОВАЯ ФАЗА", { body: currentTask.n });
+            }
+        }
+    }
+
+    function enableAlerts() {
+        Notification.requestPermission().then(perm => {
+            if(perm === 'granted') {
+                alertsEnabled = true;
+                const btn = document.getElementById('alert-btn');
+                btn.innerText = "[ УВЕДОМЛЕНИЯ АКТИВНЫ ]";
+                btn.className = "btn-alert enabled";
+            }
+        });
+    }
+
+    // ЗАПУСК СРАЗУ ПРИ ЗАГРУЗКЕ
+    render();
+    setInterval(sync, 1000);
+    sync(); 
+
+</script>
+</body>
+</html>
